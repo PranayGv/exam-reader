@@ -71,7 +71,7 @@ export default function PDFViewer({ pdfMeta, onProgressUpdate }) {
     return () => clearTimeout(timer);
   }, [numPages]);
 
-  // Native scroll listener — more reliable than React's onScroll on mobile/iOS
+  // Native scroll listener — attaches AFTER fileData loads (so contentRef.current exists)
   useEffect(() => {
     const el = contentRef.current;
     if (!el) return;
@@ -88,7 +88,7 @@ export default function PDFViewer({ pdfMeta, onProgressUpdate }) {
 
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
-  }, []); // only mount/unmount — uses refs for live values
+  }, [fileData]); // ← re-run when fileData changes so ref is populated
 
   function onDocumentLoadSuccess({ numPages: n }) {
     numPagesRef.current = n;
