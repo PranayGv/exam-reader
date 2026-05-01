@@ -8,47 +8,42 @@ import { Bot, ZoomIn, ZoomOut } from 'lucide-react';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-// Standard PDF page width at 72dpi (letter size)
-const NATURAL_PDF_WIDTH = 612;
+const NATURAL_PDF_WIDTH = 612; // standard letter PDF width at 72dpi
 
-export default function PDFViewer({ pdfMeta, onProgressUpdate }) {
-  const [numPages, setNumPages] = useState(null);
-  const [userZoom, setUserZoom] = useState(1.0); // multiplier on top of fit-width
-  const [fileData, setFileData] = useState(null);
+export default function PDFViewer({ pdfMeta, onProgressUpdate, onZoomUpdate }) {
+  const [numPages, setNumPages]       = useState(null);
+  const [userZoom, setUserZoom]       = useState(pdfMeta?.zoom || 1.0);
+  const [fileData, setFileData]       = useState(null);
   const [containerWidth, setContainerWidth] = useState(null);
-  const onProgressRef = useRef(onProgressUpdate);
-  const numPagesRef   = useRef(null);
-  const [selection, setSelection] = useState({ text: '', x: 0, y: 0, show: false });
+  const [selection, setSelection]     = useState({ text: '', x: 0, y: 0, show: false });
+
+  // Keep latest callbacks in refs so event handlers don't go stale
+  const onProgressRef  = useRef(onProgressUpdate);
+  const onZoomRef      = useRef(onZoomUpdate);
+  const numPagesRef    = useRef(null);
+  const zoomSaveTimer  = useRef(null);
 
   useEffect(() => { onProgressRef.current = onProgressUpdate; }, [onProgressUpdate]);
+  useEffect(() => { onZoomRef.current = onZoomUpdate; }, [onZoomUpdate]);
 
-  // Measure container width using a callback ref on the scroll div
-  const measureRef = useRef(null);
+  // ── Measure container width (callback ref so it fires when element mounts) ──
   const setMeasureRef = useCallback(el => {
     if (!el) return;
-    measureRef.current = el;
     const measure = () => setContainerWidth(Math.floor(el.clientWidth - 24));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
-    // Store cleanup
-    el._roCleanup = () => ro.disconnect();
   }, []);
 
-  // Attach scroll listener via callback ref on the scrollable div
+  // ── Scroll tracking (callback ref attaches as soon as div exists) ──
   const scrollEl = useRef(null);
   const setScrollRef = useCallback(el => {
-    // Detach from old
-    if (scrollEl.current) {
-      scrollEl.current.removeEventListener('scroll', handleScroll);
-    }
+    if (scrollEl.current) scrollEl.current.removeEventListener('scroll', onScroll);
     scrollEl.current = el;
-    if (el) {
-      el.addEventListener('scroll', handleScroll, { passive: true });
-    }
+    if (el) el.addEventListener('scroll', onScroll, { passive: true });
   }, []); // eslint-disable-line
 
-  function handleScroll() {
+  function onScroll() {
     const el = scrollEl.current;
     if (!el || !numPagesRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = el;
@@ -57,30 +52,32 @@ export default function PDFViewer({ pdfMeta, onProgressUpdate }) {
     onProgressRef.current?.(Math.min(100, Math.max(0, pct)));
   }
 
-  // Load PDF blob
+  // ── Load PDF + restore saved zoom when PDF changes ──
   useEffect(() => {
     if (!pdfMeta?.id) return;
     setFileData(null);
     setNumPages(null);
     numPagesRef.current = null;
-    setUserZoom(1.0);
+
+    // Restore this PDF's saved zoom (default 1.0)
+    setUserZoom(pdfMeta.zoom || 1.0);
 
     db.getPdf(pdfMeta.id)
       .then(blob => blob.arrayBuffer())
-      .then(buf => setFileData(buf))
+      .then(buf  => setFileData(buf))
       .catch(err => console.error('PDF load error:', err));
   }, [pdfMeta?.id]);
 
-  // Restore scroll after pages render
+  // ── Restore scroll position once pages render ──
   useEffect(() => {
     if (!numPages || !scrollEl.current) return;
     const el = scrollEl.current;
-    const timer = setTimeout(() => {
+    const t = setTimeout(() => {
       if (pdfMeta.progress > 0 && el.scrollHeight > el.clientHeight) {
         el.scrollTop = (pdfMeta.progress / 100) * (el.scrollHeight - el.clientHeight);
       }
     }, 1000);
-    return () => clearTimeout(timer);
+    return () => clearTimeout(t);
   }, [numPages]);
 
   function onDocumentLoadSuccess({ numPages: n }) {
@@ -88,17 +85,29 @@ export default function PDFViewer({ pdfMeta, onProgressUpdate }) {
     setNumPages(n);
   }
 
-  // Compute page render width:
-  // - On mobile: fill the container
-  // - On desktop: natural width (NATURAL_PDF_WIDTH * userZoom), capped to container
+  // ── Zoom helpers — save to DB after a short debounce ──
+  const changeZoom = (newZoom) => {
+    setUserZoom(newZoom);
+    clearTimeout(zoomSaveTimer.current);
+    zoomSaveTimer.current = setTimeout(() => {
+      onZoomRef.current?.(newZoom);
+    }, 500);
+  };
+
+  const zoomIn    = () => changeZoom(Math.min(3.0, parseFloat((userZoom + 0.2).toFixed(1))));
+  const zoomOut   = () => changeZoom(Math.max(0.4, parseFloat((userZoom - 0.2).toFixed(1))));
+  const resetZoom = () => changeZoom(1.0);
+
+  // ── Page width calculation ──
   const isMobile = window.innerWidth <= 768;
-  const baseWidth = containerWidth
+  const base = containerWidth
     ? (isMobile ? containerWidth : Math.min(containerWidth, NATURAL_PDF_WIDTH * 1.2))
     : (isMobile ? window.innerWidth - 16 : NATURAL_PDF_WIDTH * 1.2);
-  const pageWidth = Math.round(baseWidth * userZoom);
+  const pageWidth = Math.round(base * userZoom);
 
+  // ── Text selection → ChatGPT ──
   const handleSelection = () => {
-    const sel = window.getSelection();
+    const sel  = window.getSelection();
     const text = sel?.toString().trim();
     if (text?.length > 0) {
       const rect = sel.getRangeAt(0).getBoundingClientRect();
@@ -121,15 +130,15 @@ export default function PDFViewer({ pdfMeta, onProgressUpdate }) {
       <div className="pdf-toolbar">
         <div className="pdf-title">{pdfMeta.name.replace(/\.pdf$/i, '')}</div>
         <div className="pdf-controls">
-          <button className="pdf-ctrl-btn" onClick={() => setUserZoom(z => Math.max(0.4, parseFloat((z - 0.2).toFixed(1))))} disabled={userZoom <= 0.4}><ZoomOut size={16} /></button>
-          <button className="pdf-scale-label" onClick={() => setUserZoom(1.0)} title="Reset zoom">{Math.round(userZoom * 100)}%</button>
-          <button className="pdf-ctrl-btn" onClick={() => setUserZoom(z => Math.min(3.0, parseFloat((z + 0.2).toFixed(1))))} disabled={userZoom >= 3.0}><ZoomIn size={16} /></button>
+          <button className="pdf-ctrl-btn" onClick={zoomOut} disabled={userZoom <= 0.4}><ZoomOut size={16} /></button>
+          <button className="pdf-scale-label" onClick={resetZoom} title="Reset zoom">{Math.round(userZoom * 100)}%</button>
+          <button className="pdf-ctrl-btn" onClick={zoomIn}  disabled={userZoom >= 3.0}><ZoomIn  size={16} /></button>
           <div className="pdf-divider" />
           <span className="pdf-pages-label">{numPages ? `${numPages}p` : '—'}</span>
         </div>
       </div>
 
-      {/* THE KEY FIX: display:block (not flex) so overflow-y works correctly */}
+      {/* Scrollable area — display:block is critical for overflow-y to work */}
       <div
         className="pdf-scroll-area"
         ref={el => { setScrollRef(el); setMeasureRef(el); }}
@@ -146,12 +155,7 @@ export default function PDFViewer({ pdfMeta, onProgressUpdate }) {
             >
               {Array.from({ length: numPages || 0 }, (_, i) => (
                 <div key={i + 1} className="pdf-page-block">
-                  <Page
-                    pageNumber={i + 1}
-                    width={pageWidth}
-                    renderTextLayer
-                    renderAnnotationLayer
-                  />
+                  <Page pageNumber={i + 1} width={pageWidth} renderTextLayer renderAnnotationLayer />
                 </div>
               ))}
             </Document>

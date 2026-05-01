@@ -70,6 +70,18 @@ export default function StudyWorkspace() {
     await db.updateExam(newExam);
   };
 
+  const handleZoomUpdate = async (zoom) => {
+    if (!activePdf || !exam) return;
+    const isSyllabus = exam.syllabusPdf?.id === activePdf.id;
+    const updatedPdfs = (exam.pdfs || []).map(p =>
+      p.id === activePdf.id ? { ...p, zoom } : p
+    );
+    const updatedSyllabus = isSyllabus ? { ...exam.syllabusPdf, zoom } : exam.syllabusPdf;
+    const newExam = { ...exam, pdfs: updatedPdfs, syllabusPdf: updatedSyllabus };
+    setExam(newExam);
+    await db.updateExam(newExam);
+  };
+
   if (loading) return <div className="ws-loading"><div className="ws-spinner" /><span>Loading workspace...</span></div>;
   if (!exam) return <div className="ws-loading"><span>Exam not found.</span></div>;
 
@@ -202,7 +214,11 @@ export default function StudyWorkspace() {
         )}
 
         {activePdf ? (
-          <PDFViewer pdfMeta={activePdf} onProgressUpdate={handleProgressUpdate} />
+          <PDFViewer
+            pdfMeta={activePdf}
+            onProgressUpdate={handleProgressUpdate}
+            onZoomUpdate={handleZoomUpdate}
+          />
         ) : (
           <div className="empty-state glass-panel h-full">
             <FileText size={48} className="mb-4 text-muted" />
