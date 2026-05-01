@@ -70,6 +70,5 @@
   transform: translateY(-2px);
 }
 
-@media (max-width: 768px) {
-  .watermark { display: none; }
-}
+/* Hidden on exam workspace (would overlap mobile sidebar) */
+.watermark--hidden { display: none; }
