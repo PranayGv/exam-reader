@@ -95,6 +95,8 @@
   background: var(--bg-secondary);
   display: flex;
   justify-content: center;
+  /* iOS momentum scrolling */
+  -webkit-overflow-scrolling: touch;
 }
 
 .pdf-continuous-wrapper {
