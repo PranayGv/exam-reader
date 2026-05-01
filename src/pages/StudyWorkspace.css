@@ -388,3 +388,90 @@
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ═══════════════════════════════════
+   Mobile Responsive — ≤768px
+════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Workspace stacks: sidebar overlays the pdf viewer */
+  .workspace-container {
+    flex-direction: column;
+  }
+
+  /* Sidebar becomes a slide-up overlay from bottom */
+  .workspace-sidebar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100% !important;
+    min-width: unset !important;
+    max-height: 70vh;
+    border-radius: 1rem 1rem 0 0;
+    border-top: 1px solid var(--border-color);
+    border-right: none;
+    z-index: 200;
+    transform: translateY(0);
+    transition: transform 0.3s ease;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  .workspace-sidebar.sidebar-collapsed {
+    transform: translateY(calc(100% - 52px));
+    width: 100% !important;
+    min-width: unset !important;
+  }
+
+  /* PDF viewer fills the full screen on mobile */
+  .workspace-main {
+    flex: none;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Sidebar topbar becomes drag handle on mobile */
+  .sidebar-topbar {
+    cursor: grab;
+  }
+  .sidebar-topbar::before {
+    content: '';
+    position: absolute;
+    top: 0.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 4px;
+    background: var(--border-color);
+    border-radius: 999px;
+  }
+
+  /* Hide the reopen button on mobile (sidebar is always accessible via handle) */
+  .sidebar-reopen-btn {
+    display: none;
+  }
+
+  /* Collapse button rotates the other way on mobile */
+  .sidebar-collapsed .sidebar-collapse-btn svg {
+    transform: rotate(-90deg);
+  }
+
+  /* Identity block compact */
+  .sidebar-identity {
+    padding: 0.75rem 1rem 0.75rem;
+  }
+
+  .sidebar-exam-name {
+    font-size: 0.9rem;
+  }
+}
+
+/* ═══════════════════════════════════
+   Very small screens — ≤480px
+════════════════════════════════════ */
+@media (max-width: 480px) {
+  .sidebar-topbar { padding: 0.6rem 0.6rem 0.6rem 0.75rem; }
+  .sidebar-tabs { padding: 0.5rem 0.75rem 0; }
+  .sidebar-doc-list { padding: 0.5rem; }
+  .sidebar-notes-wrap { padding: 0.5rem; }
+  .sidebar-syllabus-wrap { padding: 0.5rem 0.75rem 0; }
+}

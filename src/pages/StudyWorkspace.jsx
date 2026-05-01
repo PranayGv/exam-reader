@@ -165,7 +165,7 @@ export default function StudyWorkspace() {
               <div className="sidebar-notes-wrap">
                 <textarea
                   className="sidebar-notes"
-                  placeholder="Write your notes here…"
+                  placeholder="Write your note here..."
                   value={exam.notes || ''}
                   onChange={handleNotesChange}
                 />
