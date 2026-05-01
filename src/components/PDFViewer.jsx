@@ -21,6 +21,9 @@ export default function PDFViewer({ pdfMeta, onProgressUpdate }) {
   // Measure container width — render PDF at this base width, scale via CSS transform
   useEffect(() => {
     if (!wrapperRef.current) return;
+    // Set an immediate fallback so pages render right away on mobile
+    setContainerWidth(Math.floor((wrapperRef.current.clientWidth || window.innerWidth) - 24));
+
     const observer = new ResizeObserver(entries => {
       const w = entries[0]?.contentRect.width;
       if (w) setContainerWidth(Math.floor(w - 24));
@@ -136,11 +139,11 @@ export default function PDFViewer({ pdfMeta, onProgressUpdate }) {
               loading={<div className="pdf-loading">Rendering pages...</div>}
               error={<div className="pdf-error">Failed to load PDF.</div>}
             >
-              {containerWidth && Array.from(new Array(numPages || 0), (_, index) => (
+              {Array.from(new Array(numPages || 0), (_, index) => (
                 <div key={`page_${index + 1}`} className="pdf-page-block">
                   <Page
                     pageNumber={index + 1}
-                    width={containerWidth}
+                    width={containerWidth || Math.floor(window.innerWidth - 48)}
                     renderTextLayer={true}
                     renderAnnotationLayer={true}
                   />
