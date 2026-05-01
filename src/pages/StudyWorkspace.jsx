@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, ChevronLeft, FileText } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, FileText, BookOpen, StickyNote, LayoutList } from 'lucide-react';
 import { db } from '../db';
 import PDFViewer from '../components/PDFViewer';
 import './StudyWorkspace.css';
@@ -11,6 +11,7 @@ export default function StudyWorkspace() {
   const [activePdf, setActivePdf] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState('docs'); // 'docs' | 'notes'
 
   useEffect(() => {
     const loadExam = async () => {
@@ -19,6 +20,8 @@ export default function StudyWorkspace() {
         setExam(data);
         if (data.pdfs && data.pdfs.length > 0) {
           setActivePdf(data.pdfs[0]);
+        } else if (data.syllabusPdf) {
+          setActivePdf(data.syllabusPdf);
         }
       }
       setLoading(false);
@@ -28,30 +31,20 @@ export default function StudyWorkspace() {
 
   const handleProgressUpdate = async (progress) => {
     if (!activePdf) return;
-    
     const newExam = { ...exam };
     let pdfMeta;
-    
     if (newExam.syllabusPdf?.id === activePdf.id) {
       pdfMeta = newExam.syllabusPdf;
     } else {
       pdfMeta = newExam.pdfs?.find(p => p.id === activePdf.id);
     }
-
     if (!pdfMeta) return;
-
-    if (Math.abs((pdfMeta.progress || 0) - progress) > 1) { // Only update if changed by > 1% to reduce db writes
+    if (Math.abs((pdfMeta.progress || 0) - progress) > 1) {
       pdfMeta.progress = progress;
-
       const studyPdfs = newExam.pdfs || [];
       let totalProgress = 0;
-      
-      studyPdfs.forEach(p => {
-        totalProgress += (p.progress || 0);
-      });
-
+      studyPdfs.forEach(p => { totalProgress += (p.progress || 0); });
       newExam.progress = studyPdfs.length > 0 ? (totalProgress / studyPdfs.length) : 0;
-
       setExam(newExam);
       await db.updateExam(newExam);
     }
@@ -63,106 +56,135 @@ export default function StudyWorkspace() {
     await db.updateExam(newExam);
   };
 
-  if (loading) return <div className="container mt-8">Loading workspace...</div>;
-  if (!exam) return <div className="container mt-8">Exam not found</div>;
+  if (loading) return <div className="ws-loading"><div className="ws-spinner" /><span>Loading workspace...</span></div>;
+  if (!exam) return <div className="ws-loading"><span>Exam not found.</span></div>;
+
+  const progress = Math.round(exam.progress || 0);
 
   return (
     <div className="workspace-container">
-      {/* Sidebar */}
-      {isSidebarOpen && (
-        <aside className="workspace-sidebar glass-panel" style={{ position: 'relative' }}>
-          <button 
-            className="btn-icon" 
-            onClick={() => setIsSidebarOpen(false)}
-            title="Close Sidebar"
-            style={{ position: 'absolute', top: '1.25rem', right: '1rem' }}
-          >
-            <ChevronLeft size={20} />
-          </button>
+      {/* ── Sidebar ── */}
+      <aside className={`workspace-sidebar glass-panel${isSidebarOpen ? '' : ' sidebar-collapsed'}`}>
 
-          <div className="sidebar-header">
-            <Link to="/" className="back-link">
-              <ArrowLeft size={16} /> Back to Dashboard
-            </Link>
-            <h2 className="exam-title">{exam.name}</h2>
-            
+        {/* Sidebar top bar */}
+        <div className="sidebar-topbar">
+          <Link to="/" className="sidebar-back">
+            <ArrowLeft size={15} />
+            <span>Dashboard</span>
+          </Link>
+          <button className="sidebar-collapse-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)} title={isSidebarOpen ? 'Collapse' : 'Expand'}>
+            <ChevronLeft size={18} className={isSidebarOpen ? '' : 'rotated'} />
+          </button>
+        </div>
+
+        {/* Content hidden when collapsed */}
+        {isSidebarOpen && (
+          <>
+            {/* Exam name + progress */}
+            <div className="sidebar-identity">
+              <h2 className="sidebar-exam-name">{exam.name}</h2>
+              <div className="sidebar-exam-date">
+                {new Date(exam.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+              </div>
+
+              <div className="sidebar-progress-block">
+                <div className="sidebar-progress-label">
+                  <span>Overall Progress</span>
+                  <span className="sidebar-progress-pct">{progress}%</span>
+                </div>
+                <div className="sidebar-progress-track">
+                  <div className="sidebar-progress-fill" style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Syllabus pill */}
             {exam.syllabusPdf && (
-              <button 
-                className={`btn btn-secondary w-full mt-4 flex justify-center ${activePdf?.id === exam.syllabusPdf.id ? 'active-syllabus' : ''}`}
-                onClick={() => setActivePdf(exam.syllabusPdf)}
-              >
-                <FileText size={16} className="text-accent" />
-                View Syllabus PDF
-              </button>
+              <div className="sidebar-syllabus-wrap">
+                <button
+                  className={`sidebar-syllabus-btn${activePdf?.id === exam.syllabusPdf.id ? ' active' : ''}`}
+                  onClick={() => setActivePdf(exam.syllabusPdf)}
+                >
+                  <BookOpen size={15} />
+                  <span>Syllabus PDF</span>
+                </button>
+              </div>
             )}
 
-            <div className="overall-progress mt-4">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium">Completion</span>
-                <span className="text-sm font-bold text-accent">{Math.round(exam.progress || 0)}%</span>
-              </div>
-              <div className="progress-bar-lg">
-                <div 
-                  className="progress-fill-lg" 
-                  style={{ width: `${exam.progress || 0}%` }}
-                ></div>
-              </div>
+            {/* Tab switcher */}
+            <div className="sidebar-tabs">
+              <button
+                className={`sidebar-tab${activeTab === 'docs' ? ' active' : ''}`}
+                onClick={() => setActiveTab('docs')}
+              >
+                <LayoutList size={14} /> Documents
+              </button>
+              <button
+                className={`sidebar-tab${activeTab === 'notes' ? ' active' : ''}`}
+                onClick={() => setActiveTab('notes')}
+              >
+                <StickyNote size={14} /> Notes
+              </button>
             </div>
-          </div>
 
-          <div className="sidebar-section pdf-list-section">
-            <h3 className="section-title">Documents</h3>
-            <div className="pdf-list">
-              {exam.pdfs?.map((pdf) => (
-                <button 
-                  key={pdf.id}
-                  className={`pdf-nav-item flex-col ${activePdf?.id === pdf.id ? 'active' : ''}`}
-                  onClick={() => setActivePdf(pdf)}
-                >
-                  <div className="flex items-center gap-2 w-full">
-                    <FileText size={18} />
-                    <span className="truncate flex-1">{pdf.name}</span>
-                    <span className="text-xs text-muted font-medium">{Math.round(pdf.progress || 0)}%</span>
-                  </div>
-                  <div className="progress-bar w-full mt-2" style={{ height: '4px', background: 'var(--bg-primary)' }}>
-                    <div className="progress-fill" style={{ width: `${pdf.progress || 0}%`, background: 'var(--accent-primary)' }}></div>
-                  </div>
-                </button>
-              ))}
-              {(!exam.pdfs || exam.pdfs.length === 0) && (
-                <div className="text-sm text-muted">No PDFs uploaded</div>
-              )}
-            </div>
-          </div>
+            {/* Documents tab */}
+            {activeTab === 'docs' && (
+              <div className="sidebar-doc-list">
+                {(exam.pdfs || []).length === 0 && (
+                  <div className="sidebar-empty">No study PDFs uploaded.</div>
+                )}
+                {(exam.pdfs || []).map((pdf) => {
+                  const pct = Math.round(pdf.progress || 0);
+                  const isActive = activePdf?.id === pdf.id;
+                  return (
+                    <button
+                      key={pdf.id}
+                      className={`sidebar-doc-item${isActive ? ' active' : ''}`}
+                      onClick={() => setActivePdf(pdf)}
+                    >
+                      <div className="sidebar-doc-icon">
+                        <FileText size={16} />
+                      </div>
+                      <div className="sidebar-doc-info">
+                        <div className="sidebar-doc-name">{pdf.name.replace(/\.pdf$/i, '')}</div>
+                        <div className="sidebar-doc-progress-row">
+                          <div className="sidebar-doc-track">
+                            <div className="sidebar-doc-fill" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="sidebar-doc-pct">{pct}%</span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
-          <div className="sidebar-section notes-section">
-            <h3 className="section-title">Notes</h3>
-            <textarea
-              className="notes-textarea"
-              placeholder="Jot down important notes here..."
-              value={exam.notes || ''}
-              onChange={handleNotesChange}
-            ></textarea>
-          </div>
-        </aside>
-      )}
+            {/* Notes tab */}
+            {activeTab === 'notes' && (
+              <div className="sidebar-notes-wrap">
+                <textarea
+                  className="sidebar-notes"
+                  placeholder="Write your notes here…"
+                  value={exam.notes || ''}
+                  onChange={handleNotesChange}
+                />
+              </div>
+            )}
+          </>
+        )}
+      </aside>
 
-      {/* Main Content Area */}
+      {/* ── PDF Viewer ── */}
       <main className="workspace-main" style={{ position: 'relative' }}>
         {!isSidebarOpen && (
-          <div className="floating-nav glass-panel shadow-md flex items-center gap-1 rounded-lg absolute top-4 left-4 z-50" style={{ padding: '0.25rem' }}>
-            <button 
-              className="btn-icon p-2 rounded-md" 
-              onClick={() => setIsSidebarOpen(true)}
-              title="Open Sidebar"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-            </button>
-            <div style={{ background: 'var(--border-color)', width: '1px', height: '20px', margin: '0 4px' }}></div>
-            <Link to="/" className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium">
-              <ArrowLeft size={16} /> Dashboard
-            </Link>
-          </div>
+          <button
+            className="sidebar-reopen-btn"
+            onClick={() => setIsSidebarOpen(true)}
+            title="Open Sidebar"
+          >
+            <LayoutList size={18} />
+          </button>
         )}
 
         {activePdf ? (

@@ -36,6 +36,11 @@
   position: relative;
 }
 
+.main-content--full {
+  padding: 0;
+  overflow: hidden;
+}
+
 .watermark {
   position: fixed;
   bottom: 1rem;
