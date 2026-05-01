@@ -30,24 +30,38 @@ export default function StudyWorkspace() {
   }, [id]);
 
   const handleProgressUpdate = async (progress) => {
-    if (!activePdf) return;
-    const newExam = { ...exam };
-    let pdfMeta;
-    if (newExam.syllabusPdf?.id === activePdf.id) {
-      pdfMeta = newExam.syllabusPdf;
-    } else {
-      pdfMeta = newExam.pdfs?.find(p => p.id === activePdf.id);
-    }
-    if (!pdfMeta) return;
-    if (Math.abs((pdfMeta.progress || 0) - progress) > 1) {
-      pdfMeta.progress = progress;
-      const studyPdfs = newExam.pdfs || [];
-      let totalProgress = 0;
-      studyPdfs.forEach(p => { totalProgress += (p.progress || 0); });
-      newExam.progress = studyPdfs.length > 0 ? (totalProgress / studyPdfs.length) : 0;
-      setExam(newExam);
-      await db.updateExam(newExam);
-    }
+    if (!activePdf || !exam) return;
+
+    const isSyllabus = exam.syllabusPdf?.id === activePdf.id;
+
+    // Find current saved progress to check if update is needed
+    const currentProgress = isSyllabus
+      ? (exam.syllabusPdf?.progress || 0)
+      : (exam.pdfs?.find(p => p.id === activePdf.id)?.progress || 0);
+
+    if (Math.abs(currentProgress - progress) <= 1) return;
+
+    // Immutably update pdfs array
+    const updatedPdfs = (exam.pdfs || []).map(p =>
+      p.id === activePdf.id ? { ...p, progress } : p
+    );
+    const updatedSyllabus = isSyllabus
+      ? { ...exam.syllabusPdf, progress }
+      : exam.syllabusPdf;
+
+    const overall = updatedPdfs.length > 0
+      ? updatedPdfs.reduce((sum, p) => sum + (p.progress || 0), 0) / updatedPdfs.length
+      : 0;
+
+    const newExam = {
+      ...exam,
+      pdfs: updatedPdfs,
+      syllabusPdf: updatedSyllabus,
+      progress: overall,
+    };
+
+    setExam(newExam);
+    await db.updateExam(newExam);
   };
 
   const handleNotesChange = async (e) => {

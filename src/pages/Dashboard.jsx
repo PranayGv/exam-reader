@@ -63,7 +63,7 @@ export default function Dashboard() {
               <div className="exam-card-body">
                 <div className="exam-detail">
                   <Calendar size={16} />
-                  <span>{new Date(exam.date).toLocaleDateString()}</span>
+                  <span>{new Date(exam.date + 'T00:00:00').toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' })}</span>
                 </div>
                 <div className="exam-detail">
                   <Book size={16} />

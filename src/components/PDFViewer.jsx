@@ -129,8 +129,6 @@ export default function PDFViewer({ pdfMeta, onProgressUpdate }) {
             style={{
               transform: `scale(${scale})`,
               transformOrigin: 'top center',
-              // Reserve the space the scaled content needs so scroll works correctly
-              marginBottom: `${(scale - 1) * 100}%`,
             }}
           >
             <Document
