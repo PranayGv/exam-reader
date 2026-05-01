@@ -30,12 +30,12 @@ export default function Dashboard() {
 
   return (
     <div className="container dashboard">
-      <div className="flex justify-between items-center mb-8">
+      <div className="dashboard-header">
         <div>
           <h1>Your Dashboard</h1>
           <p>Track and manage your upcoming exams.</p>
         </div>
-        <Link to="/add" className="btn btn-primary">Add Exam</Link>
+        <Link to="/add" className="btn btn-primary">+ Add Exam</Link>
       </div>
 
       {exams.length === 0 ? (

@@ -4,7 +4,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { db } from '../db';
 import './PDFViewer.css';
-import { Bot, ZoomIn, ZoomOut } from 'lucide-react';
+import { Bot, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -18,12 +18,12 @@ export default function PDFViewer({ pdfMeta, onProgressUpdate }) {
   const [initialScrollSet, setInitialScrollSet] = useState(false);
   const [selection, setSelection] = useState({ text: '', x: 0, y: 0, show: false });
 
-  // Measure container width for responsive PDF sizing
+  // Measure container width — render PDF at this base width, scale via CSS transform
   useEffect(() => {
     if (!wrapperRef.current) return;
     const observer = new ResizeObserver(entries => {
       const w = entries[0]?.contentRect.width;
-      if (w) setContainerWidth(w - 32); // subtract padding
+      if (w) setContainerWidth(Math.floor(w - 24));
     });
     observer.observe(wrapperRef.current);
     return () => observer.disconnect();
@@ -35,6 +35,7 @@ export default function PDFViewer({ pdfMeta, onProgressUpdate }) {
       try {
         setFileData(null);
         setNumPages(null);
+        setScale(1.0); // reset zoom on doc switch
         const fileBlob = await db.getPdf(pdfMeta.id);
         const arrayBuffer = await fileBlob.arrayBuffer();
         setFileData(arrayBuffer);
@@ -95,43 +96,58 @@ export default function PDFViewer({ pdfMeta, onProgressUpdate }) {
     window.getSelection().removeAllRanges();
   };
 
-  // Page width: use container width when available, else scale-based
-  const pageWidth = containerWidth ? containerWidth * scale : undefined;
+  const zoomIn  = () => setScale(s => Math.min(3.0, parseFloat((s + 0.2).toFixed(1))));
+  const zoomOut = () => setScale(s => Math.max(0.3, parseFloat((s - 0.2).toFixed(1))));
+  const resetZoom = () => setScale(1.0);
 
   if (!fileData) return <div className="pdf-loading">Loading PDF...</div>;
 
   return (
     <div className="pdf-viewer-container" onMouseUp={handleSelection}>
+      {/* Toolbar */}
       <div className="pdf-toolbar">
         <div className="pdf-title">{pdfMeta.name.replace(/\.pdf$/i, '')}</div>
         <div className="pdf-controls">
-          <button className="pdf-ctrl-btn" onClick={() => setScale(s => Math.max(0.4, s - 0.15))} title="Zoom out"><ZoomOut size={16} /></button>
-          <span className="pdf-scale-label">{Math.round(scale * 100)}%</span>
-          <button className="pdf-ctrl-btn" onClick={() => setScale(s => Math.min(3, s + 0.15))} title="Zoom in"><ZoomIn size={16} /></button>
+          <button className="pdf-ctrl-btn" onClick={zoomOut} title="Zoom out" disabled={scale <= 0.3}><ZoomOut size={16} /></button>
+          <button className="pdf-scale-label" onClick={resetZoom} title="Reset zoom">{Math.round(scale * 100)}%</button>
+          <button className="pdf-ctrl-btn" onClick={zoomIn}  title="Zoom in"  disabled={scale >= 3.0}><ZoomIn  size={16} /></button>
           <div className="pdf-divider" />
-          <span className="pdf-pages-label">{numPages ? `${numPages} pages` : '—'}</span>
+          <span className="pdf-pages-label">{numPages ? `${numPages}p` : '—'}</span>
         </div>
       </div>
 
+      {/* Scroll container */}
       <div className="pdf-content" onScroll={handleScroll} ref={contentRef}>
+        {/* wrapperRef measures available width */}
         <div className="pdf-continuous-wrapper" ref={wrapperRef}>
-          <Document
-            file={fileData}
-            onLoadSuccess={onDocumentLoadSuccess}
-            loading={<div className="pdf-loading">Rendering pages...</div>}
-            error={<div className="pdf-error">Failed to load PDF.</div>}
+          {/* Inner div scaled with CSS transform so zoom doesn't re-render pages */}
+          <div
+            className="pdf-scaled-inner"
+            style={{
+              transform: `scale(${scale})`,
+              transformOrigin: 'top center',
+              // Reserve the space the scaled content needs so scroll works correctly
+              marginBottom: `${(scale - 1) * 100}%`,
+            }}
           >
-            {Array.from(new Array(numPages || 0), (_, index) => (
-              <div key={`page_${index + 1}`} className="pdf-page-block">
-                <Page
-                  pageNumber={index + 1}
-                  width={pageWidth}
-                  renderTextLayer={true}
-                  renderAnnotationLayer={true}
-                />
-              </div>
-            ))}
-          </Document>
+            <Document
+              file={fileData}
+              onLoadSuccess={onDocumentLoadSuccess}
+              loading={<div className="pdf-loading">Rendering pages...</div>}
+              error={<div className="pdf-error">Failed to load PDF.</div>}
+            >
+              {containerWidth && Array.from(new Array(numPages || 0), (_, index) => (
+                <div key={`page_${index + 1}`} className="pdf-page-block">
+                  <Page
+                    pageNumber={index + 1}
+                    width={containerWidth}
+                    renderTextLayer={true}
+                    renderAnnotationLayer={true}
+                  />
+                </div>
+              ))}
+            </Document>
+          </div>
         </div>
       </div>
 
